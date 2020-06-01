@@ -15,9 +15,10 @@ import random
 #     def update(self):
 #         self.rect.x += 5
 
-class Car:
-    # direction: right, down for now
+class Car(pygame.Rect):
+    # direction: right, down for now (r,d)
     def __init__(self, x, y, direction='r'):
+        self.color = (0,250,0)
         self.l = 40
         self.w = 15
         self.x = x
@@ -29,7 +30,7 @@ class Car:
         print(self.vel)
 
     def render(self, screen):
-        pygame.draw.rect(screen,(255,0,0),(self.x,self.y,self.l, self.w))
+        pygame.draw.rect(screen,self.color,(self.x,self.y,self.l, self.w))
 
     def update(self):
         if self.direction == 'r':
@@ -37,6 +38,12 @@ class Car:
         elif self.direction == 'd':
             self.y += self.vel
 
+    def change_color(self, status):
+        # color change to indicate inside boundary
+        if status == 'enter':
+            self.color = (250,0,0)
+        elif status == 'exit':
+            self.color = (0,250,0)
 
 
 class Road(pygame.Rect):
@@ -59,13 +66,42 @@ class Road(pygame.Rect):
 
 class Intersection:
     def __init__(self, roads):
+        self.count = 0
+        self.cars = set() # rolling list of contained cars
         self.roads = roads
         self.intersection = roads[0].clip(self.roads[1]) # created from road overlap
-        #print(dir(self.intersection))
+        self.factor = 5 # factor
+        self.coords = (self.intersection.x - self.factor*self.intersection.w,
+                self.intersection.y - self.factor*self.intersection.h,
+                self.intersection.w*(2*self.factor + 1), # arbitrary choice 
+                self.intersection.h*(2*self.factor + 1))
+        self.outer_boundary = pygame.Rect(self.coords)
+
     def render(self, screen):
-        #coords = (self.intersection.x, self.intersection.y, self.intersection.w//2, self.intersection.h//2)
-        pygame.draw.rect(screen,(250,0,0),self.intersection)
-    
+        pygame.draw.rect(screen,(150,150,0),self.intersection,1)
+        pygame.draw.rect(screen,(10,150,0),self.coords,1) 
+        #pygame.draw.rect(screen,(10,150,0),self.outer_boundary,1) # same as above
+    def check(self):
+        current_cars = set(self.outer_boundary.collidelistall(simulation.cars))
+        cars_in = current_cars - self.cars
+        cars_out = self.cars - current_cars
+        if cars_in:
+            for car in cars_in:
+                print('new car in:',car)
+                print(simulation.cars[car].color)
+                simulation.cars[car].change_color('enter')
+                simulation.cars[car].render(simulation.screen)
+                print(simulation.cars[car].color)
+        if cars_out:
+            for car in cars_out:
+                print('car leaving:',car)
+                print(simulation.cars[car].color)
+                simulation.cars[car].change_color('exit')
+                simulation.cars[car].render(simulation.screen)
+                print(simulation.cars[car].color)
+
+        self.cars = current_cars
+
 class Simulation:
     def __init__(self):
         self.running = True
@@ -109,9 +145,11 @@ class Simulation:
                 road.render(self.screen)
 
             self.intersection.render(self.screen)
+            self.intersection.check()
 
             for car in self.cars:
                 car.render(self.screen)
+
             #all_sprites.draw(screen)
             # *after* drawing everything, flip the display
             #pygame.display.flip()

@@ -54,43 +54,73 @@ class Road(pygame.Rect):
 
 class Intersection:
     def __init__(self, roads):
+        self.controller = Controller(self) # Init. controller to manage cars
         self.count = 0
         self.cars = set() # rolling list of contained cars
         self.roads = roads
+        # Make coordinates for crossing zone (actual intersection)
+        self.cross_zone = roads[0].clip(self.roads[1]) # Overlapping area
         # Make coordinates for outer boundary (acceleration zone)
-        self.intersection = roads[0].clip(self.roads[1]) # created from road overlap
-        # Make coordinates for outer boundary (acceleration zone)
-        self.factor = 5 # factor
-        self.coords = (self.intersection.x - self.factor*self.intersection.w,
-                self.intersection.y - self.factor*self.intersection.h,
-                self.intersection.w*(2*self.factor + 1), # arbitrary choice 
-                self.intersection.h*(2*self.factor + 1))
-        self.outer_boundary = pygame.Rect(self.coords)
+        self.factor = 5 # factor - arbitrary. Can be int or .5
+        self.bndry_coords = (self.cross_zone.x - self.factor*self.cross_zone.w,
+                self.cross_zone.y - self.factor*self.cross_zone.h,
+                self.cross_zone.w*(2*self.factor + 1), # arbitrary choice 
+                self.cross_zone.h*(2*self.factor + 1))
+        self.outer_boundary = pygame.Rect(self.bndry_coords)
 
     def render(self, screen):
-        pygame.draw.rect(screen,(150,150,0),self.intersection,1)
-        pygame.draw.rect(screen,(10,150,0),self.coords,1) 
+        pygame.draw.rect(screen,(150,150,0),self.cross_zone,1)
+        pygame.draw.rect(screen,(10,150,0),self.bndry_coords,1) 
 
     def check(self):
         current_cars = set(self.outer_boundary.collidelistall(simulation.cars))
         cars_incoming = current_cars - self.cars
         cars_outgoing = self.cars - current_cars
         if cars_incoming:
-            for car in cars_incoming:
+            for c in cars_incoming:
+                car = simulation.cars[c] # get car object
                 print('new car in:',car)
-                simulation.cars[car].change_color('enter')
-                simulation.cars[car].render(simulation.screen)
+                car.change_color('enter')
+                car.render(simulation.screen)
+                self.controller.reserve_spot(car)
         if cars_outgoing:
-            for car in cars_outgoing:
+            for c in cars_outgoing:
+                car = simulation.cars[c]
                 print('car leaving:',car)
-                simulation.cars[car].change_color('exit')
-                simulation.cars[car].render(simulation.screen)
+                car.change_color('exit')
+                car.render(simulation.screen)
 
         self.cars = current_cars
 
-class Computer:
-    def __init__(self):
-        pass
+
+class Controller():
+    def __init__(self, parent_intersection):
+        self.intersection = parent_intersection
+        self.cars_in = set()
+        self.reservations = {}
+        print(self.intersection)
+    
+    def reserve_spot(self, car):
+        factor = self.intersection.factor
+        width = self.intersection.cross_zone.width
+        now = pygame.time.get_ticks()/1000 # simulation time in seconds
+        time_start = now + factor * width/car.vel # time to crossing
+        time_end = time_start + (width + car.l) / car.vel
+        time_request = (time_start, time_end)
+        overlap = self.overlap(time_request)
+        if not overlap:
+            print('OK')
+        else:
+            print('CRASH!')
+        print(time_request)
+        vel = car.vel
+        car_len = car.l
+
+    def overlap(self, request):
+        if not self.reservations: # if empty, no overlap -> reserve time
+            return False
+        #for r in self.reservations.items():
+        #    if 
 
 
 
@@ -99,6 +129,9 @@ class Simulation:
         self.running = True
         self.size = self.WIDTH, self.HEIGHT = 1000, 1000
         self.screen = pygame.display.set_mode(self.size)
+        pygame.font.init()
+        t = pygame.font.SysFont('dejavusans',30)
+        self.message = t.render('press <space> to restart', False,(255,255,255))
 
     def on_init(self):
         pygame.init()
@@ -122,6 +155,10 @@ class Simulation:
                 if event.type == pygame.QUIT:
                     self.running = False
 
+                elif event.type == pygame.KEYDOWN: # Space button restarts
+                    if event.key == pygame.K_SPACE:
+                        self.execute()
+
 
             # Update
             #all_sprites.update()
@@ -139,6 +176,8 @@ class Simulation:
             for car in self.cars:
                 car.render(self.screen)
 
+
+            self.screen.blit(self.message,(0,0))
             # *after* drawing everything, flip the display
             #pygame.display.flip()
 

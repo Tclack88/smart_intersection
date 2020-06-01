@@ -2,11 +2,6 @@ import pygame
 from pygame.locals import *
 import random
 
-WIDTH = 1000
-HEIGHT = 1000
-GREEN = (0,255,0)
-BLACK = (0,0,0)
-FPS = 30
 
 # Keeping this here if I have to go the "sprite" route
 # class Car(pygame.sprite.Sprite):
@@ -34,7 +29,7 @@ class Car:
         print(self.vel)
 
     def render(self, screen):
-        pygame.draw.rect(screen,(0,250,0),(self.x,self.y,self.l, self.w))
+        pygame.draw.rect(screen,(255,0,0),(self.x,self.y,self.l, self.w))
 
     def update(self):
         if self.direction == 'r':
@@ -44,25 +39,33 @@ class Car:
 
 
 
-class Road:
+class Road(pygame.Rect):
     def __init__(self, orientation, location):
         """orientation: str: 'h' or 'v' (horizontal/vertical)
         location: 0 < float < 1 (fraction of screen width/height)"""
         if orientation == 'h':
-            self.w = WIDTH
+            self.w = simulation.WIDTH
             self.h = 50
             self.x = 0 
-            self.y = HEIGHT/2 - self.h/2
+            self.y = simulation.HEIGHT/2 - self.h/2
         elif orientation == 'v':
-            self.h = HEIGHT
+            self.h = simulation.HEIGHT
             self.w = 50
             self.y = 0
-            self.x = WIDTH/2 - self.w/2
+            self.x = simulation.WIDTH/2 - self.w/2
 
     def render(self, screen):
         pygame.draw.rect(screen, (100,100,100), (self.x, self.y, self.w, self.h))
 
-
+class Intersection:
+    def __init__(self, roads):
+        self.roads = roads
+        self.intersection = roads[0].clip(self.roads[1]) # created from road overlap
+        #print(dir(self.intersection))
+    def render(self, screen):
+        #coords = (self.intersection.x, self.intersection.y, self.intersection.w//2, self.intersection.h//2)
+        pygame.draw.rect(screen,(250,0,0),self.intersection)
+    
 class Simulation:
     def __init__(self):
         self.running = True
@@ -74,11 +77,12 @@ class Simulation:
         pygame.mixer.init()
         pygame.display.set_caption("Smart Intersection Simulation")
         self.clock = pygame.time.Clock()
-        self.FPS = 30
+        self.FPS = 20
     
     def object_init(self):
-        self.cars = [Car(0, HEIGHT/2), Car(WIDTH/2, 0, 'd')]
+        self.cars = [Car(0, self.HEIGHT/2), Car(self.WIDTH/2, 0, 'd')]
         self.roads = [Road('h',.5), Road('v',.5)]
+        self.intersection = Intersection(self.roads)
 
     def on_loop(self):
         while self.running:
@@ -100,9 +104,12 @@ class Simulation:
                 car.update()
             pygame.display.update()
             # Draw / render
-            self.screen.fill(BLACK)
+            self.screen.fill((0,0,0))
             for road in self.roads:
                 road.render(self.screen)
+
+            self.intersection.render(self.screen)
+
             for car in self.cars:
                 car.render(self.screen)
             #all_sprites.draw(screen)

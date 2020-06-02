@@ -15,11 +15,11 @@ class Car(pygame.Rect):
         self.y = y
         self.vel = 20 + random.randint(0,10) - 10
         self.direction = direction
-        if self.direction == 'd':
+        if self.direction in ['d', 'u']:
             self.l, self.w = self.w, self.l
         #print(self.vel)
 
-    def __hash__(self): #adding hash, allows object to be stored in dict/set
+    def __hash__(self): # adding hash, allows object to be stored in dict/set
         return hash(self.id)
 
     def render(self, screen):
@@ -30,7 +30,13 @@ class Car(pygame.Rect):
             self.x += self.vel
         elif self.direction == 'd':
             self.y += self.vel
-        if self.x > simulation.WIDTH or self.y > simulation.HEIGHT:
+        elif self.direction == 'l':
+            self.x -= self.vel
+        elif self.direction == 'u':
+            self.y -= self.vel
+
+
+        if 0 > self.x > simulation.WIDTH or 0 > self.y > simulation.HEIGHT:
             self.destroy()
 
     def approach_speed_limit(self):
@@ -197,7 +203,7 @@ class Simulation:
         pygame.time.set_timer(self.SPAWN, 1000)
     
     def object_init(self):
-        self.cars = [Car(0, self.HEIGHT/2), Car(self.WIDTH/2, 0, 'd')]
+        self.cars = [Car(0, self.HEIGHT/2, 'r'), Car(self.WIDTH/2-20, 0, 'd')]#,
         self.roads = [Road('h',.5), Road('v',.5)]
         self.intersection = Intersection(self.roads)
 
@@ -209,8 +215,11 @@ class Simulation:
             for event in pygame.event.get():
                 
                 if event.type == self.SPAWN:
-                    self.cars.append(random.choice([Car(0, self.HEIGHT/2),
-                        Car(self.WIDTH/2, 0, 'd')]))
+                    self.cars.append(random.choice([Car(0, self.HEIGHT/2, 'r'),
+                        Car(self.WIDTH/2 - 20, 0, 'd'),
+                        Car(self.WIDTH, self.HEIGHT/2-20, 'l'), 
+                        Car(self.WIDTH/2, self.HEIGHT,'u')]))
+                    #TODO: make these move in the correct direction in cars class
 
 
                 if event.type == pygame.KEYDOWN: # Space button restarts

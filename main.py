@@ -34,7 +34,7 @@ class Car(pygame.Rect):
         self.w = 15
         self.x = x
         self.y = y
-        self.vel = 20 + random.randint(0,10) - 5
+        self.vel = simulation.speed_limit - 2 +  random.randint(0,4)
         self.direction = direction
         if self.direction in ['d', 'u']:
             self.l, self.w = self.w, self.l
@@ -104,7 +104,7 @@ class Intersection:
     def __init__(self, roads):
         self.controller = Controller(self) # Init. controller to manage cars
         self.count = 0
-        self.cars = set() # rolling list of contained cars
+        self.cars = set() # rolling set of contained cars
         self.roads = roads
         # Make coordinates for crossing zone (actual intersection)
         self.cross_zone = roads[0].clip(self.roads[1]) # Overlapping area
@@ -117,12 +117,13 @@ class Intersection:
         self.outer_boundary = pygame.Rect(self.bndry_coords)
 
     def render(self, screen):
+        """draw cross zone (actual intersection) and outer boundary"""
         pygame.draw.rect(screen,(150,150,0),self.cross_zone,1)
         pygame.draw.rect(screen,(10,150,0),self.bndry_coords,1) 
 
-    def check(self):
+    def check_for_cars(self):
         """ Update records of cars entering and leaving boundary"""
-        current_cars = set(self.outer_boundary.collidelistall(simulation.cars))
+        current_cars = self.outer_boundary.collidelistall(simulation.cars)
         current_cars = set([simulation.cars[c] for c in current_cars])
         cars_incoming = current_cars - self.cars
         cars_outgoing = self.cars - current_cars
@@ -157,9 +158,9 @@ class Simulation:
         pygame.display.set_caption("Smart Intersection Simulation")
         self.clock = pygame.time.Clock()
         self.FPS = 20
-        self.SPAWN = pygame.USEREVENT+1
+        self.SPAWN = pygame.USEREVENT + 1
         self.speed_limit = 20
-        pygame.time.set_timer(self.SPAWN, 300)
+        pygame.time.set_timer(self.SPAWN, 500)
 
     def object_init(self):
         self.cars = [Car(0, self.HEIGHT/2, 'r'), Car(self.WIDTH/2-20, 0, 'd')]#,
@@ -195,7 +196,7 @@ class Simulation:
                 road.render(self.screen)
 
             self.intersection.render(self.screen)
-            self.intersection.check()
+            self.intersection.check_for_cars()
 
             for car in self.cars:
                 car.render(self.screen)

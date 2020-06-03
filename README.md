@@ -13,6 +13,6 @@ After installing the requirements below, run `main.py`
 
 ## TODO's:
 
-[] avoid "fenders" or "passing through" by initiating a slow down when approachng
-[] Debug "SEND INSTRUCTIONS ERROR" and "REMOVE RESERVATION ERROR"
-[] Allow turns
+- [] avoid "fenders" or "passing through" by initiating a slow down when approachng
+- [] Debug "SEND INSTRUCTIONS ERROR" and "REMOVE RESERVATION ERROR"
+- [] Allow turns

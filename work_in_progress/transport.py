@@ -1,4 +1,3 @@
-from collections import OrderedDict
 import pygame
 from pygame.locals import *
 import random
@@ -10,16 +9,26 @@ class Car(pygame.Rect):
     def __init__(self, x, y, direction):
         self.id = id(self)
         self.color = (0,250,0)
-        self.l = 40
+        self.l = random.choice([20, 40, 50, 80])
         self.w = 15
         self.x = x
         self.y = y
-        self.vel = 20 + random.randint(0,10) - 5
+        self.vel = simulation.speed_limit - 2 +  random.randint(0,4)
+        self.speed_instructions = [] # special instructions (speed, time pair)
+        self.refresh_initial_conditions(direction)
+        #self.set_front() # perhaps incorporate into refresh initial conditions
+       
+    def refresh_initial_conditions(self, direction):
         self.direction = direction
         if self.direction in ['d', 'u']:
             self.l, self.w = self.w, self.l
-        self.speed_instructions = [] # special instructions (speed, time pair)
         #print('new car travelling at', self.vel)
+
+    def set_front(self):
+        pass
+        #front_map = {'r':self.right,'l':self.left,'u':self.top,'d':self.bottom}
+        #self.front = front_map[self.direction]
+        #print('front',self.front,self.direction)
 
     def __hash__(self):
         """adding hash, allows object to be stored in dict/set"""
@@ -102,7 +111,7 @@ class Intersection:
     def __init__(self, roads):
         self.controller = Controller(self) # Init. controller to manage cars
         self.count = 0
-        self.cars = set() # rolling list of contained cars
+        self.cars = set() # rolling set of contained cars
         self.roads = roads
         # Make coordinates for crossing zone (actual intersection)
         self.cross_zone = roads[0].clip(self.roads[1]) # Overlapping area
@@ -115,12 +124,13 @@ class Intersection:
         self.outer_boundary = pygame.Rect(self.bndry_coords)
 
     def render(self, screen):
+        """draw cross zone (actual intersection) and outer boundary"""
         pygame.draw.rect(screen,(150,150,0),self.cross_zone,1)
         pygame.draw.rect(screen,(10,150,0),self.bndry_coords,1) 
 
-    def check(self):
+    def check_for_cars(self):
         """ Update records of cars entering and leaving boundary"""
-        current_cars = set(self.outer_boundary.collidelistall(simulation.cars))
+        current_cars = self.outer_boundary.collidelistall(simulation.cars)
         current_cars = set([simulation.cars[c] for c in current_cars])
         cars_incoming = current_cars - self.cars
         cars_outgoing = self.cars - current_cars
@@ -143,14 +153,15 @@ class Controller():
     def __init__(self, parent_intersection):
         self.intersection = parent_intersection
         self.cars_in = set()
-        self.reservations = {} # OrderedDict() # ordered for 3.7 and up already
-    
+        self.reservations = {} # reserved time slots for passing cars
+                               # dict ordered for 3.7 and up already.
+                               # can change to OrderedDict to be more general
     def reserve_spot(self, car):
         factor = self.intersection.factor
         width = self.intersection.cross_zone.width
         self.now = pygame.time.get_ticks() / 1000 # simulation time in seconds
         time_start = self.now + factor * width/car.vel # time to crossing
-        time_end = time_start + (width + car.l) / car.vel
+        time_end = time_start + (width + 1.1* car.l) / car.vel # add 10% buffer
         time_request = (time_start, time_end)
         if not self.conflicting(time_request):
             self.reservations.update({car : time_request}) 
@@ -160,12 +171,7 @@ class Controller():
             self.resolve(car, time_request)
 
     def remove_reservation(self, car):
-        #self.reservations.pop(car) # probably something like this
-        try:
-            self.reservations.pop(car) # probably something like this
-        except:
-            # TODO: Debug
-            print('\nREMOVE RESERVATION ERROR \n') # Get it the next time around
+        self.reservations.pop(car) 
 
     def conflicting(self, request):
         if not self.reservations: # if empty, no overlap -> reserve time
@@ -177,6 +183,7 @@ class Controller():
         return False
 
     def resolve(self, car, time_request):
+        new_request = None
         delta = time_request[1] - time_request[0]
         res = list(self.reservations.values()) # list of reserved times
         front = (self.now, res[0][0]) # time delta range in the front
@@ -197,18 +204,16 @@ class Controller():
                         new_request = (new_start, new_end)
                         print('slowing a little')
                         self.reservations.update({car : new_request})
-            else:
+            if not new_request: 
+                # if the above failed, there's no room in front or between
+                # so we add it to the end
                 print('slowing')
                 new_start = res[-1][1] + .1 * delta # 10% time buffer
                 new_end = new_start + delta
                 new_request = (new_start, new_end)
                 self.reservations.update({car : new_request})
 
-        try:
-            self.send_instructions(car, new_request)
-        except:
-            #TODO debug
-            print('SEND INSTRUCTIONS ERROR')
+        self.send_instructions(car, new_request)
 
     def send_instructions(self, car, request):
         factor = self.intersection.factor
@@ -238,7 +243,7 @@ class Simulation:
         pygame.display.set_caption("Smart Intersection Simulation")
         self.clock = pygame.time.Clock()
         self.FPS = 20
-        self.SPAWN = pygame.USEREVENT+1
+        self.SPAWN = pygame.USEREVENT + 1
         self.speed_limit = 20
         pygame.time.set_timer(self.SPAWN, 500)
     
@@ -276,7 +281,7 @@ class Simulation:
                 road.render(self.screen)
 
             self.intersection.render(self.screen)
-            self.intersection.check()
+            self.intersection.check_for_cars()
 
             for car in self.cars:
                 car.render(self.screen)

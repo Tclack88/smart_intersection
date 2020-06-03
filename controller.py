@@ -1,4 +1,3 @@
-from collections import OrderedDict
 import pygame
 from pygame.locals import *
 import random
@@ -8,14 +7,15 @@ class Controller():
     def __init__(self, parent_intersection):
         self.intersection = parent_intersection
         self.cars_in = set()
-        self.reservations = {} # OrderedDict() # ordered for 3.7 and up already
-
+        self.reservations = {} # reserved time slots for passing cars
+                               # dict ordered for 3.7 and up already.
+                               # can change to OrderedDict to be more general
     def reserve_spot(self, car):
         factor = self.intersection.factor
         width = self.intersection.cross_zone.width
         self.now = pygame.time.get_ticks() / 1000 # simulation time in seconds
         time_start = self.now + factor * width/car.vel # time to crossing
-        time_end = time_start + (width + car.l) / car.vel
+        time_end = time_start + (width + 1.1* car.l) / car.vel # add 10% buffer
         time_request = (time_start, time_end)
         if not self.conflicting(time_request):
             self.reservations.update({car : time_request})
@@ -25,12 +25,7 @@ class Controller():
             self.resolve(car, time_request)
 
     def remove_reservation(self, car):
-        #self.reservations.pop(car) # probably something like this
-        try:
-            self.reservations.pop(car) # probably something like this
-        except:
-            # TODO: Debug
-            print('\nREMOVE RESERVATION ERROR \n') # Get it the next time around
+        self.reservations.pop(car)
 
     def conflicting(self, request):
         if not self.reservations: # if empty, no overlap -> reserve time
@@ -42,6 +37,7 @@ class Controller():
         return False
 
     def resolve(self, car, time_request):
+        new_request = None
         delta = time_request[1] - time_request[0]
         res = list(self.reservations.values()) # list of reserved times
         front = (self.now, res[0][0]) # time delta range in the front
@@ -62,18 +58,16 @@ class Controller():
                         new_request = (new_start, new_end)
                         print('slowing a little')
                         self.reservations.update({car : new_request})
-            else:
+            if not new_request:
+                # if the above failed, there's no room in front or between
+                # so we add it to the end
                 print('slowing')
                 new_start = res[-1][1] + .1 * delta # 10% time buffer
                 new_end = new_start + delta
                 new_request = (new_start, new_end)
                 self.reservations.update({car : new_request})
 
-        try:
-            self.send_instructions(car, new_request)
-        except:
-            #TODO debug
-            print('SEND INSTRUCTIONS ERROR')
+        self.send_instructions(car, new_request)
 
     def send_instructions(self, car, request):
         factor = self.intersection.factor
@@ -86,3 +80,5 @@ class Controller():
         #v2 = car.vel # d2/t2 = car.vel, so this isn't necessary
         velocity_instructions = (v1,t1)
         car.speed_instructions.append(velocity_instructions)
+
+

@@ -8,8 +8,8 @@ class Controller():
     def __init__(self, parent_intersection):
         self.intersection = parent_intersection
         self.cars_in = set()
-        self.reservations = OrderedDict() # ordered for 3.7 and up already
-    
+        self.reservations = {} # OrderedDict() # ordered for 3.7 and up already
+
     def reserve_spot(self, car):
         factor = self.intersection.factor
         width = self.intersection.cross_zone.width
@@ -18,14 +18,19 @@ class Controller():
         time_end = time_start + (width + car.l) / car.vel
         time_request = (time_start, time_end)
         if not self.conflicting(time_request):
-            self.reservations.update({car : time_request}) 
+            self.reservations.update({car : time_request})
+            print('no adjustments')
         else:
-            print('CRASH!')
-            print(self.reservations, time_request)
+            #print('Crash or close call predicted')
             self.resolve(car, time_request)
-        #print(time_request)
-        vel = car.vel
-        car_len = car.l
+
+    def remove_reservation(self, car):
+        #self.reservations.pop(car) # probably something like this
+        try:
+            self.reservations.pop(car) # probably something like this
+        except:
+            # TODO: Debug
+            print('\nREMOVE RESERVATION ERROR \n') # Get it the next time around
 
     def conflicting(self, request):
         if not self.reservations: # if empty, no overlap -> reserve time
@@ -38,29 +43,46 @@ class Controller():
 
     def resolve(self, car, time_request):
         delta = time_request[1] - time_request[0]
-        #print('thelist')
-        #print(list(self.reservations.values())[0][0])
         res = list(self.reservations.values()) # list of reserved times
         front = (self.now, res[0][0]) # time delta range in the front
-        print(sum(front)/2)
-        print(time_request[1])
-        if (delta < front[1] - front[0]) and (time_request[1] < sum(front)/2):
+        if (delta < front[1] - front[0]) and (time_request[1] < sum(res[0])/2):
             # In this case it's better to speed up
-            print('can fit in front!')
-            #TODO: speed up! Not possible until I have more cars
-            print()
-        else: 
+            print('speeding up')
+            new_end = front[1] - .1 * delta # 10% buffer
+            new_start = new_end - delta
+            new_request = (new_start, new_end)
+            self.reservations.update({car : new_request})
+        else:
             last_ranges = [(res[i][1], res[i+1][0]) for i in range(len(res)-1)]
             if len(last_ranges) > 1:
-                print('last range',last_ranges)
                 for r in last_ranges:
                     if delta < r[1]-r[0]:
-                        print(r[1] - r[0], delta)
-                        print('squeeze time!')
-                        #TODO: get 2 averages instruct car to adjust accordingly
-                        # Not possible until I have more cars
+                        new_start = (r[1] - r[0] - delta)/2 + r[0]
+                        new_end = new_start + delta
+                        new_request = (new_start, new_end)
+                        print('slowing a little')
+                        self.reservations.update({car : new_request})
             else:
-                all_ranges = [front] + last_ranges
-                print('add to end?')
-                #TODO: add range to end, may be similar to above
-                print()
+                print('slowing')
+                new_start = res[-1][1] + .1 * delta # 10% time buffer
+                new_end = new_start + delta
+                new_request = (new_start, new_end)
+                self.reservations.update({car : new_request})
+
+        try:
+            self.send_instructions(car, new_request)
+        except:
+            #TODO debug
+            print('SEND INSTRUCTIONS ERROR')
+
+    def send_instructions(self, car, request):
+        factor = self.intersection.factor
+        intersection_width = self.intersection.cross_zone.w
+        t1 = request[0] - self.now
+        d1 = factor * intersection_width
+        v1 = d1/t1
+        #t2 = request[1] - request[0] 
+        #d2 = intersection_width + car.l
+        #v2 = car.vel # d2/t2 = car.vel, so this isn't necessary
+        velocity_instructions = (v1,t1)
+        car.speed_instructions.append(velocity_instructions)

@@ -5,35 +5,54 @@ import random
 
 
 class Car(pygame.Rect):
-    # direction: right, down for now (r,d)
-    def __init__(self, x, y, direction='r'):
+    """initialized with position (x,y) (INT,INT)
+    and travel direction ('u','d','l','r') STR"""
+    def __init__(self, x, y, direction):
         self.id = id(self)
         self.color = (0,250,0)
         self.l = 40
         self.w = 15
         self.x = x
         self.y = y
-        self.vel = 20 + random.randint(0,10) - 10
+        self.vel = 20 + random.randint(0,10) - 5
         self.direction = direction
         if self.direction in ['d', 'u']:
             self.l, self.w = self.w, self.l
-        #print(self.vel)
+        self.speed_instructions = [] # special instructions (speed, time pair)
+        #print('new car travelling at', self.vel)
 
-    def __hash__(self): # adding hash, allows object to be stored in dict/set
+    def __hash__(self):
+        """adding hash, allows object to be stored in dict/set"""
         return hash(self.id)
 
     def render(self, screen):
         pygame.draw.rect(screen,self.color,(self.x,self.y,self.l, self.w))
 
     def update(self):
+        if self.speed_instructions: # issued by controller
+            now = pygame.time.get_ticks() / 1000
+            marker_time = self.speed_instructions[0][1]
+            if now > marker_time:
+                # if we're past the instruction time,
+                # remove it and return to the original speed
+                # NOTE: Strong assumption there's only one instruction
+                # To get around this I will probably have to call self.update
+                # again, but I'd just need to be careful of recursive errors
+                self.speed_instructions.pop(0)
+                vel = self.vel
+            else:
+                vel = self.speed_instructions[0][0]
+        else:
+            vel = self.vel
+
         if self.direction == 'r':
-            self.x += self.vel
+            self.x += vel
         elif self.direction == 'd':
-            self.y += self.vel
+            self.y += vel
         elif self.direction == 'l':
-            self.x -= self.vel
+            self.x -= vel
         elif self.direction == 'u':
-            self.y -= self.vel
+            self.y -= vel
 
 
         if 0 > self.x > simulation.WIDTH or 0 > self.y > simulation.HEIGHT:
@@ -44,11 +63,12 @@ class Car(pygame.Rect):
         self.vel -= diff
 
     def destroy(self):
+        """ remove cars beyond boundary lines """
         simulation.cars.remove(self)
         simulation.intersection.cars = set(simulation.cars)
 
     def change_color(self, status):
-        # color change to indicate inside boundary
+        """ color change to indicate if within boundary """
         if status == 'enter':
             self.color = (250,0,0)
         elif status == 'exit':
@@ -71,10 +91,14 @@ class Road(pygame.Rect):
             self.x = simulation.WIDTH/2 - self.w/2
 
     def render(self, screen):
-        pygame.draw.rect(screen, (100,100,100), (self.x, self.y, self.w, self.h))
+        pygame.draw.rect(screen, (100,100,100), (self.x,self.y,self.w,self.h))
 
 
 class Intersection:
+    """ Input: a list of two road (pygame rect objects)
+    Establishes - crossing zone - where the road rectangles cross
+                - outer boundary - buffer zone for cars to accelerate
+    """
     def __init__(self, roads):
         self.controller = Controller(self) # Init. controller to manage cars
         self.count = 0
@@ -95,30 +119,24 @@ class Intersection:
         pygame.draw.rect(screen,(10,150,0),self.bndry_coords,1) 
 
     def check(self):
+        """ Update records of cars entering and leaving boundary"""
         current_cars = set(self.outer_boundary.collidelistall(simulation.cars))
         current_cars = set([simulation.cars[c] for c in current_cars])
         cars_incoming = current_cars - self.cars
         cars_outgoing = self.cars - current_cars
         if cars_incoming:
             for car in cars_incoming:
-                #car = simulation.cars[c] # get car object
-                #print('new car in:',car)
                 car.change_color('enter')
                 car.render(simulation.screen)
                 self.controller.reserve_spot(car)
         if cars_outgoing:
             for car in cars_outgoing:
-                #car = simulation.cars[c]
-                #print('car leaving:',car)
                 car.change_color('exit')
                 car.render(simulation.screen)
                 self.controller.remove_reservation(car)
                 car.approach_speed_limit()
 
         self.cars = current_cars
-        crossing_cars = set(self.cross_zone.collidelistall(list(self.cars)))
-        if crossing_cars:
-            pass #TODO: for each car, chase original speed
 
 
 class Controller():
@@ -138,18 +156,16 @@ class Controller():
             self.reservations.update({car : time_request}) 
             print('no adjustments')
         else:
-            #print('CRASH!')
+            #print('Crash or close call predicted')
             self.resolve(car, time_request)
-        #print(time_request)
-        print('\n\nreservations:')
-        print(self.reservations)
 
     def remove_reservation(self, car):
         #self.reservations.pop(car) # probably something like this
         try:
             self.reservations.pop(car) # probably something like this
         except:
-            print('\n\nERROR\n\n') # Gets it the next time around
+            # TODO: Debug
+            print('\nREMOVE RESERVATION ERROR \n') # Get it the next time around
 
     def conflicting(self, request):
         if not self.reservations: # if empty, no overlap -> reserve time
@@ -162,44 +178,49 @@ class Controller():
 
     def resolve(self, car, time_request):
         delta = time_request[1] - time_request[0]
-        #print('thelist')
-        #print(list(self.reservations.values())[0][0])
         res = list(self.reservations.values()) # list of reserved times
         front = (self.now, res[0][0]) # time delta range in the front
         if (delta < front[1] - front[0]) and (time_request[1] < sum(res[0])/2):
             # In this case it's better to speed up
-            print('can fit in front!')
+            print('speeding up')
             new_end = front[1] - .1 * delta # 10% buffer
             new_start = new_end - delta
             new_request = (new_start, new_end)
             self.reservations.update({car : new_request})
-            #TODO: speed up! Not possible until I have more cars
-            print()
-
         else: 
             last_ranges = [(res[i][1], res[i+1][0]) for i in range(len(res)-1)]
             if len(last_ranges) > 1:
-                #print('last range',last_ranges)
                 for r in last_ranges:
                     if delta < r[1]-r[0]:
                         new_start = (r[1] - r[0] - delta)/2 + r[0]
                         new_end = new_start + delta
                         new_request = (new_start, new_end)
-                        print('squeeze time!')
+                        print('slowing a little')
                         self.reservations.update({car : new_request})
-                        # TODO: car.set_speed_zones(
             else:
-                #all_ranges = [front] + last_ranges
-                print('add to end?')
-                #TODO: add range to end, may be similar to above
+                print('slowing')
                 new_start = res[-1][1] + .1 * delta # 10% time buffer
                 new_end = new_start + delta
                 new_request = (new_start, new_end)
                 self.reservations.update({car : new_request})
-                print()
 
+        try:
+            self.send_instructions(car, new_request)
+        except:
+            #TODO debug
+            print('SEND INSTRUCTIONS ERROR')
 
-
+    def send_instructions(self, car, request):
+        factor = self.intersection.factor
+        intersection_width = self.intersection.cross_zone.w
+        t1 = request[0] - self.now
+        d1 = factor * intersection_width
+        v1 = d1/t1
+        #t2 = request[1] - request[0] 
+        #d2 = intersection_width + car.l
+        #v2 = car.vel # d2/t2 = car.vel, so this isn't necessary
+        velocity_instructions = (v1,t1)
+        car.speed_instructions.append(velocity_instructions)
 
 
 class Simulation:
@@ -216,10 +237,10 @@ class Simulation:
         pygame.mixer.init()
         pygame.display.set_caption("Smart Intersection Simulation")
         self.clock = pygame.time.Clock()
-        self.FPS = 10
+        self.FPS = 20
         self.SPAWN = pygame.USEREVENT+1
         self.speed_limit = 20
-        pygame.time.set_timer(self.SPAWN, 1000)
+        pygame.time.set_timer(self.SPAWN, 500)
     
     def object_init(self):
         self.cars = [Car(0, self.HEIGHT/2, 'r'), Car(self.WIDTH/2-20, 0, 'd')]#,
@@ -245,8 +266,6 @@ class Simulation:
                 # check for closing window
                 elif event.type == pygame.QUIT:
                     self.running = False
-
-
             # Update
             for car in self.cars:
                 car.update()
@@ -262,11 +281,9 @@ class Simulation:
             for car in self.cars:
                 car.render(self.screen)
 
-
             self.screen.blit(self.message,(0,0))
             # *after* drawing everything, flip the display
             #pygame.display.flip()
-
         pygame.quit()
 
     def execute(self):
@@ -278,4 +295,3 @@ class Simulation:
 if __name__ == "__main__":
     simulation = Simulation()
     simulation.execute()
-

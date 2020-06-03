@@ -21,23 +21,25 @@ class Road(pygame.Rect):
             self.x = simulation.WIDTH/2 - self.w/2
 
     def render(self, screen):
-        pygame.draw.rect(screen, (100,100,100), (self.x, self.y, self.w, self.h))
+        pygame.draw.rect(screen, (100,100,100), (self.x,self.y,self.w,self.h))
 
 
 class Car(pygame.Rect):
-    """initialized with position (x,y) (INT,INT) 
+    """initialized with position (x,y) (INT,INT)
     and travel direction ('u','d','l','r') STR"""
-    def __init__(self, x, y, direction='r'):
+    def __init__(self, x, y, direction):
         self.id = id(self)
         self.color = (0,250,0)
         self.l = 40
         self.w = 15
         self.x = x
         self.y = y
-        self.vel = 20 + random.randint(0,10) - 10
+        self.vel = 20 + random.randint(0,10) - 5
         self.direction = direction
         if self.direction in ['d', 'u']:
             self.l, self.w = self.w, self.l
+        self.speed_instructions = [] # special instructions (speed, time pair)
+        #print('new car travelling at', self.vel)
 
     def __hash__(self):
         """adding hash, allows object to be stored in dict/set"""
@@ -46,15 +48,33 @@ class Car(pygame.Rect):
     def render(self, screen):
         pygame.draw.rect(screen,self.color,(self.x,self.y,self.l, self.w))
 
+
     def update(self):
+        if self.speed_instructions: # issued by controller
+            now = pygame.time.get_ticks() / 1000
+            marker_time = self.speed_instructions[0][1]
+            if now > marker_time:
+                # if we're past the instruction time,
+                # remove it and return to the original speed
+                # NOTE: Strong assumption there's only one instruction
+                # To get around this I will probably have to call self.update
+                # again, but I'd just need to be careful of recursive errors
+                self.speed_instructions.pop(0)
+                vel = self.vel
+            else:
+                vel = self.speed_instructions[0][0]
+        else:
+            vel = self.vel
+
         if self.direction == 'r':
-            self.x += self.vel
+            self.x += vel
         elif self.direction == 'd':
-            self.y += self.vel
+            self.y += vel
         elif self.direction == 'l':
-            self.x -= self.vel
+            self.x -= vel
         elif self.direction == 'u':
-            self.y -= self.vel
+            self.y -= vel
+
 
         if 0 > self.x > simulation.WIDTH or 0 > self.y > simulation.HEIGHT:
             self.destroy()
@@ -77,7 +97,7 @@ class Car(pygame.Rect):
 
 
 class Intersection:
-    """ Input: a list of two road (pygame rect objects)  
+    """ Input: a list of two road (pygame rect objects)
     Establishes - crossing zone - where the road rectangles cross
                 - outer boundary - buffer zone for cars to accelerate
     """
@@ -115,12 +135,11 @@ class Intersection:
             for car in cars_outgoing:
                 car.change_color('exit')
                 car.render(simulation.screen)
+                self.controller.remove_reservation(car)
                 car.approach_speed_limit()
 
         self.cars = current_cars
-        crossing_cars = set(self.cross_zone.collidelistall(list(self.cars)))
-        if crossing_cars:
-            pass #TODO: for each car, chase original speed
+
 
 
 class Simulation:
@@ -138,10 +157,10 @@ class Simulation:
         pygame.display.set_caption("Smart Intersection Simulation")
         self.clock = pygame.time.Clock()
         self.FPS = 20
-        self.SPAWN = pygame.USEREVENT + 1
+        self.SPAWN = pygame.USEREVENT+1
         self.speed_limit = 20
-        pygame.time.set_timer(self.SPAWN, 1000)
-    
+        pygame.time.set_timer(self.SPAWN, 300)
+
     def object_init(self):
         self.cars = [Car(0, self.HEIGHT/2, 'r'), Car(self.WIDTH/2-20, 0, 'd')]#,
         self.roads = [Road('h',.5), Road('v',.5)]
@@ -153,20 +172,19 @@ class Simulation:
             self.clock.tick(self.FPS)
             # Process input (events)
             for event in pygame.event.get():
+
                 if event.type == self.SPAWN:
                     self.cars.append(random.choice([Car(0, self.HEIGHT/2, 'r'),
                         Car(self.WIDTH/2 - 20, 0, 'd'),
-                        Car(self.WIDTH, self.HEIGHT/2-20, 'l'), 
+                        Car(self.WIDTH, self.HEIGHT/2-20, 'l'),
                         Car(self.WIDTH/2, self.HEIGHT,'u')]))
-                # check for space bar pressed (reset)
-                if event.type == pygame.KEYDOWN: 
+
+                if event.type == pygame.KEYDOWN: # Space button restarts
                     if event.key == pygame.K_SPACE:
                         self.execute()
                 # check for closing window
                 elif event.type == pygame.QUIT:
                     self.running = False
-
-
             # Update
             for car in self.cars:
                 car.update()
@@ -182,18 +200,16 @@ class Simulation:
             for car in self.cars:
                 car.render(self.screen)
 
-
             self.screen.blit(self.message,(0,0))
             # *after* drawing everything, flip the display
             #pygame.display.flip()
-
         pygame.quit()
 
     def execute(self):
         self.on_init()
         self.object_init()
         self.on_loop()
-
+                                 
 
 if __name__ == "__main__":
     simulation = Simulation()

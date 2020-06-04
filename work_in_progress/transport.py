@@ -242,10 +242,10 @@ class Simulation:
         pygame.mixer.init()
         pygame.display.set_caption("Smart Intersection Simulation")
         self.clock = pygame.time.Clock()
-        self.FPS = 20
+        self.FPS = 30
         self.SPAWN = pygame.USEREVENT + 1
         self.speed_limit = 20
-        pygame.time.set_timer(self.SPAWN, 500)
+        pygame.time.set_timer(self.SPAWN, 300)
     
     def object_init(self):
         self.cars = [Car(0, self.HEIGHT/2, 'r'), Car(self.WIDTH/2-20, 0, 'd')]#,

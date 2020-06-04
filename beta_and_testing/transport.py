@@ -1,20 +1,20 @@
+from collections import OrderedDict
 import pygame
 from pygame.locals import *
 import random
 
 
 class Car(pygame.Rect):
-    """initialized with position (x,y) (INT,INT)
+    """initialized with point tuple (x,y) (INT,INT)
     and travel direction ('u','d','l','r') STR"""
-    def __init__(self, x, y, direction):
-        self.id = id(self)
+    def __init__(self, starting_point, direction):
         self.color = (0,250,0)
         self.l = random.choice([20, 40, 50, 80])
         self.w = 15
-        self.x = x
-        self.y = y
-        self.vel = simulation.speed_limit - 2 +  random.randint(0,4)
-        self.speed_instructions = [] # special instructions (speed, time pair)
+        self.x = starting_point[0]
+        self.y = starting_point[1]
+        self.vel = simulation.speed_limit - 5 +  random.randint(0,5)
+        self.speed_instructions = [] # special instructions (speed, time) tuple
         self.refresh_initial_conditions(direction)
         #self.set_front() # perhaps incorporate into refresh initial conditions
        
@@ -32,7 +32,7 @@ class Car(pygame.Rect):
 
     def __hash__(self):
         """adding hash, allows object to be stored in dict/set"""
-        return hash(self.id)
+        return hash(id(self))
 
     def render(self, screen):
         pygame.draw.rect(screen,self.color,(self.x,self.y,self.l, self.w))
@@ -88,19 +88,36 @@ class Road(pygame.Rect):
     def __init__(self, orientation, location):
         """orientation: str: 'h' or 'v' (horizontal/vertical)
         location: 0 < float < 1 (fraction of screen width/height)"""
+        self.orientation = orientation # used for car initialzation
+
         if orientation == 'h':
             self.w = simulation.WIDTH
             self.h = 50
-            self.x = 0 
-            self.y = simulation.HEIGHT/2 - self.h/2
+            self.center = (simulation.WIDTH / 2 , simulation.HEIGHT * location)
+            self.buffer = (self.h - 30) // 4 # subtract 2 car widths, to get
+                                             # remainder. Leave 50% that for
+                                             # "center divide" & 25% to ends
         elif orientation == 'v':
             self.h = simulation.HEIGHT
             self.w = 50
-            self.y = 0
-            self.x = simulation.WIDTH/2 - self.w/2
+            self.center = (simulation.WIDTH * location, simulation.HEIGHT / 2)
+            self.buffer = (self.w - 30) // 4
 
     def render(self, screen):
         pygame.draw.rect(screen, (100,100,100), (self.x,self.y,self.w,self.h))
+
+    def add_car(self):
+        """ Initializes a car going in a random direction from either end """
+        possible_directions = {'h':['l','r'], 'v':['u','d']}
+        starting_points = {
+                'l': (self.right, self.top + self.buffer),
+                'r': (self.left, self.bottom - self.buffer - 15),
+                'u': (self.right - self.buffer - 15, self.bottom),
+                'd': (self.left + self.buffer, self.top)}
+
+        direction = random.choice(possible_directions[self.orientation])
+        starting_point = starting_points[direction]
+        simulation.cars.append(Car(starting_point, direction))
 
 
 class Intersection:
@@ -153,7 +170,8 @@ class Controller():
     def __init__(self, parent_intersection):
         self.intersection = parent_intersection
         self.cars_in = set()
-        self.reservations = {} # reserved time slots for passing cars
+        self.reservations = OrderedDict()
+        # reserved time slots for passing cars
                                # dict ordered for 3.7 and up already.
                                # can change to OrderedDict to be more general
     def reserve_spot(self, car):
@@ -248,8 +266,8 @@ class Simulation:
         pygame.time.set_timer(self.SPAWN, 300)
     
     def object_init(self):
-        self.cars = [Car(0, self.HEIGHT/2, 'r'), Car(self.WIDTH/2-20, 0, 'd')]#,
         self.roads = [Road('h',.5), Road('v',.5)]
+        self.cars = []
         self.intersection = Intersection(self.roads)
 
     def on_loop(self):
@@ -260,12 +278,9 @@ class Simulation:
             for event in pygame.event.get():
                 
                 if event.type == self.SPAWN:
-                    self.cars.append(random.choice([Car(0, self.HEIGHT/2, 'r'),
-                        Car(self.WIDTH/2 - 20, 0, 'd'),
-                        Car(self.WIDTH, self.HEIGHT/2-20, 'l'), 
-                        Car(self.WIDTH/2, self.HEIGHT,'u')]))
+                    random.choice(self.roads).add_car()
 
-                if event.type == pygame.KEYDOWN: # Space button restarts
+                elif event.type == pygame.KEYDOWN: # Space button restarts
                     if event.key == pygame.K_SPACE:
                         self.execute()
                 # check for closing window
